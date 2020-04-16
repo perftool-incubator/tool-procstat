@@ -1,2 +1,5 @@
 # tool-procstat
-Tool subproject to facilitate collection and post-processing of data in /proc
+Scripts to help collect and post-process files in the /proc filesystem
+
+#### rickshaw.json
+A config file to describe how to run and post-process procstat, as well as where procstat should and should not run.

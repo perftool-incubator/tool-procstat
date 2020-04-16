@@ -1,0 +1,41 @@
+{
+    "rickshaw-tool": {
+        "schema": {
+            "version": "2020.03.18"
+        }
+    },
+    "tool": "procstat",
+    "controller": {
+        "post-script": "%tool-dir%/procstat-post-process"
+    },
+    "collector": {
+        "files-from-controller": [
+            {
+                "src": "%tool-dir%/procstat-start",
+                "dest": "/usr/bin/"
+            },
+            {
+                "src": "%tool-dir%/procstat-collect",
+                "dest": "/usr/bin/"
+            },
+            {
+                "src": "%tool-dir%/procstat-stop",
+                "dest": "/usr/bin/"
+            }
+        ],
+        "blacklist": [
+            {
+                "endpoint": "k8s",
+                "collector-types": [ "client", "server" ]
+            }
+        ],
+        "whitelist": [
+            {
+                "endpoint": "k8s",
+                "collector-types": [ "master", "worker" ]
+            }
+        ],
+        "start": "procstat-start",
+        "stop": "procstat-stop"
+      }
+}
