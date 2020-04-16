@@ -1,0 +1,56 @@
+#!/bin/bash
+exec >procstat-start-stderrout.txt
+exec 2>&1
+
+echo "args: $@"
+echo "pwd: `/bin/pwd`"
+echo "hostname: `hostname`"
+# defaults
+files="sched_debug,interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat"
+interval=3
+procstat_collect="/usr/bin/procstat-collect"
+
+longopts="files:,interval:"
+opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
+if [ $? -ne 0 ]; then
+    printf -- "\tUnrecognized option specified\n\n"
+    exit 1
+fi
+eval set -- "$opts";
+while true; do
+    case "$1" in
+        --files)
+            shift;
+            files=$1
+            echo "files=$files"
+            shift;
+            ;;
+        --interval)
+            shift;
+            interval=$1
+            echo "interval=$interval"
+            shift;
+            ;;
+        --)
+            shift;
+            break
+            ;;
+        *)
+            echo "Invalid optioni: $1"
+            exit 1
+    esac
+done
+
+/bin/rm -f procstat-pids.txt
+if [ -e $procstat_collect ]; then
+    $procstat_collect $files $interval &
+    procstat_pid=$!
+    if [ -z "$procstat_pid" ]; then
+        echo "Could not get procstat-collect PID, exiting"
+        exit 1
+    fi
+    echo "procstat pid is $procstat_pid"
+    echo $procstat_pid >procstat-pid.txt
+else
+    echo "$procstat_collect is not present, exiting"
+fi

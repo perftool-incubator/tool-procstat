@@ -1,0 +1,50 @@
+#!/bin/bash
+
+files=$1; shift
+interval=$1; shift
+
+re='^[1-9][0-9]*$'
+if [[ ! "$interval" =~ $re ]]; then
+    echo "Interval must a be a positive interger, exiting"
+    exit 1
+fi
+
+if [ "`/bin/pwd`" == "/" ]; then
+    echo "Don't run this in /"
+    exit 2
+fi
+
+if [ -d "proc" ]; then
+    /bin/rm -rf "proc"
+fi
+
+for file in `echo $files | sed -e 's/,/ /g'`; do
+    good_file=0
+    cat /proc/$file 2>/dev/null >/dev/null && good_file=1
+    if [ $good_file -eq 1 ]; then
+        echo $file is good
+        local_dir=`dirname /proc/$file | sed -e 'sX^/XX'`
+        mkdir -p "$local_dir"
+        good_files="$good_files $file"
+    else
+        echo "/proc/$file can't be collected, skipping"
+    fi
+    good_files="`echo $good_files | sed -e 's/^ //'`"
+done
+
+if [ -z "$good_files" ]; then
+    echo "No files to collect, exiting"
+    exit 3
+fi
+
+echo "Collecting these files: $good_files"
+
+while [ 1 == 1 ]; do
+    for file in $good_files; do
+        local_file=proc/$file
+        this_date="DATE:`date +%s.%N`"
+        echo -e "\n$this_date" >>$local_file
+        cat /proc/$file >>$local_file
+        sleep $interval
+    done
+done
