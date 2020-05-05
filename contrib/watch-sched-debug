@@ -1,0 +1,199 @@
+#!/usr/bin/perl
+# -*- mode: perl; indent-tabs-mode: nil; perl-indent-level: 4 -*-
+# vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=perl
+
+use strict;
+use warnings;
+
+use Time::HiRes qw(time sleep);
+use Getopt::Long;
+use Text::Diff;
+use threads qw(yield);
+use Thread::Semaphore;
+use Thread::Queue;
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Pair = ' : ';
+$Data::Dumper::Useqq = 1;
+$Data::Dumper::Indent = 1;
+
+my %args;
+$args{'interval'} = 10;
+$args{'cpus'} = { '0' => 1 };
+$args{'count'} = -1;
+
+sub arg_handler {
+    my ($opt_name, $opt_value) = @_;
+
+    if ($opt_name eq 'count') {
+        $args{'count'} = $opt_value;
+    } elsif ($opt_name eq 'interval') {
+        $args{'interval'} = $opt_value;
+    } elsif ($opt_name eq 'cpus') {
+        $args{'cpus'} = {};
+
+        foreach my $element (split(/,/, $opt_value)) {
+            if ($element =~ /^[0-9]+$/) {
+                $args{'cpus'}{$element} = 1;
+            } elsif ($element =~ /-/) {
+                my @array = split(/-/, $element);
+
+                for (my $i=$array[0]; $i<=$array[1]; $i++) {
+                    $args{'cpus'}{$i} = 1;
+                }
+            }
+        }
+    }
+}
+
+sub read_file {
+    my ($file_name) = @_;
+
+    my $timestamp = time();
+    my $file_content = do {
+        local(@ARGV, $/) = $file_name;
+        <>
+    };
+
+    return ($timestamp . '|' . $file_content);
+}
+
+GetOptions("interval=s" => \&arg_handler,
+           "count=s" => \&arg_handler,
+           "cpus=s" => \&arg_handler)
+    or die("Error in command line arguments");
+
+my $quit : shared = 0;
+my $data_queue = new Thread::Queue();
+my $signal_quit = 0;
+use vars qw ($signal_quit);
+
+$SIG{'INT'} = sub { $signal_quit = 1; };
+
+my $collector_thread = threads->create('collector', $data_queue, \$quit);
+my $reporter_thread = threads->create('reporter', $data_queue, \$quit);
+
+while(($signal_quit == 0) && $collector_thread->is_running() && $reporter_thread->is_running()) {
+    sleep($args{'interval'} / 2);
+}
+$quit = 1;
+
+$collector_thread->join();
+$reporter_thread->join();
+
+exit(0);
+
+sub reporter {
+    my ($queue, $quit) = @_;
+
+    my $cur_sample;
+    my $prev_sample;
+
+    while(!$$quit || $queue->pending()) {
+        undef($cur_sample);
+
+        my $cur_sample = $queue->dequeue_timed($args{'interval'} / 2);
+
+        if (defined($cur_sample)) {
+            $cur_sample = parse_sample($cur_sample);
+
+            if (defined($prev_sample)) {
+                diff_samples($prev_sample, $cur_sample);
+            }
+
+            $prev_sample = $cur_sample;
+        }
+    }
+
+    return(0);
+}
+
+sub collector {
+    my ($queue, $quit) = @_;
+
+    my $counter = 0;
+
+    while(!$$quit) {
+        my $sample = read_file('/proc/sched_debug');
+        $queue->enqueue($sample);
+
+        if ($args{'count'} != -1) {
+            $counter += 1;
+            if ($counter == ($args{'count'} + 1)) {
+                $$quit = 1;
+            }
+        }
+
+        if (!$$quit) {
+            sleep($args{'interval'});
+        }
+    }
+
+    return(0);
+}
+
+sub parse_sample {
+    my ($sample) = @_;
+
+    my %sample_data;
+
+    my @data = split(/\|/, $sample, 2);
+    $sample_data{'timestamp'} = $data[0];
+
+    my @cpus = split(/cpu#/, $data[1]);
+
+    for (my $i=1; $i<scalar(@cpus); $i++) {
+        $cpus[$i] =~ m/^([0-9]+),/;
+        my $cpu_num = $1;
+
+        if (! exists($args{'cpus'}{$cpu_num})) {
+            next;
+        }
+
+        my @cpu_data = split(/runnable tasks:/, $cpus[$i]);
+
+        $sample_data{$cpu_num} = $cpu_data[1];
+    }
+
+    return \%sample_data;
+}
+
+sub format_timestamp {
+    my ($ts) = @_;
+
+    my @var = localtime(int($ts));
+    my $subsec = ($ts - int($ts))*1000;
+
+    return (sprintf("%04d-%02d-%02d %02d:%02d:%02d.%03d", $var[5]+1900, $var[4]+1, $var[3], $var[2], $var[1], $var[0], $subsec));
+}
+
+sub diff_samples {
+    my ($start, $stop) = @_;
+
+    print "\n";
+    printf "Start: %s (%s)\n", format_timestamp($start->{'timestamp'}), $start->{'timestamp'};
+    printf "End:   %s (%s)\n", format_timestamp($stop->{'timestamp'}), $stop->{'timestamp'};
+
+    foreach my $cpu (sort(keys %{$args{'cpus'}})) {
+        print "\nCPU: $cpu\n\n";
+
+        my @start_array = split(/\n/, $start->{$cpu}, 4);
+        my @stop_array = split(/\n/, $stop->{$cpu}, 4);
+
+        print $start_array[1] . "\n";
+        print $start_array[2] . "\n";
+
+        my $cpu_diff = diff(\$start_array[3], \$stop_array[3], { STYLE => "Unified", CONTEXT => 0 });
+
+        my @diff_lines = split(/\n/, $cpu_diff);
+
+        for (my $i=0; $i<scalar(@diff_lines); $i++) {
+            if ($diff_lines[$i] =~ /^@@/) {
+                next;
+            }
+
+            print $diff_lines[$i] . "\n";
+        }
+    }
+}
