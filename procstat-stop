@@ -12,6 +12,9 @@ if [ -e procstat-pid.txt ]; then
         exit 1
     fi
     kill -s SIGTERM $pid
+    find ./proc -type f | while read line; do
+        xz -3 -T 0 $line
+    done
 else
     echo "procstst-pid.txt not found"
     echo "PWD: `/bin/pwd`"
