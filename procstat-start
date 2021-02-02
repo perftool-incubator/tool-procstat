@@ -6,7 +6,7 @@ echo "args: $@"
 echo "pwd: `/bin/pwd`"
 echo "hostname: `hostname`"
 # defaults
-files="sched_debug,interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat"
+files="interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat"
 interval=3
 procstat_collect="/usr/bin/procstat-collect"
 

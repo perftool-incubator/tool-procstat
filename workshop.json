@@ -7,26 +7,8 @@
     "userenvs": [
         {
             "name": "default",
-            "requirements": [ "xz_src" ]
+            "requirements": []
         }
     ],
-    "requirements": [
-        {
-            "name": "xz_src",
-            "type": "source",
-            "source_info": {
-                "url": "https://tukaani.org/xz/xz-5.2.5.tar.gz",
-                "filename": "xz-5.2.5.tar.gz",
-                "commands": {
-                    "unpack": "tar -zxf xz-5.2.5.tar.gz",
-                    "get_dir": "tar -ztf xz-5.2.5.tar.gz | head -n 1",
-                    "commands": [
-                        "./configure",
-                        "make",
-                        "make install"
-                    ]
-                }
-            }
-        }
-    ]
+    "requirements": []
 }
