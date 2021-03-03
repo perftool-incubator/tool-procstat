@@ -41,6 +41,14 @@ while true; do
     esac
 done
 
+for i in /sys/devices/system/cpu/ /proc/irq/; do
+    if [ -e $i ]; then
+        find $i | cpio -pdumv --quiet . 2>/dev/null
+    else
+        echo "WARNING: could not find $i"
+    fi
+done
+
 /bin/rm -f procstat-pids.txt
 if [ -e $procstat_collect ]; then
     $procstat_collect $files $interval &
