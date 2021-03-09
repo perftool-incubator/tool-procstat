@@ -14,10 +14,6 @@ if [ "`/bin/pwd`" == "/" ]; then
     exit 2
 fi
 
-if [ -d "proc" ]; then
-    /bin/rm -rf "proc"
-fi
-
 for file in `echo $files | sed -e 's/,/ /g'`; do
     good_file=0
     cat /proc/$file 2>/dev/null >/dev/null && good_file=1
