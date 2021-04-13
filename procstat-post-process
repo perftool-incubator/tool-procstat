@@ -20,122 +20,83 @@ BEGIN {
 use lib "$ENV{'TOOLBOX_HOME'}/perl";
 use toolbox::json;
 use toolbox::cpu;
+use toolbox::metrics;
 
-sub build_netdev_types {
-    my %netdev_types;
-    my $netdev_types_file = "netdev-types.txt";
-    if (-f $netdev_types_file) {
-	my $fh = new IO::Uncompress::UnXz $netdev_types_file, Transparent => 1 || die "Could not open $netdev_types_file";
-        while ( my $line = <$fh>) {
-            chomp $line;
-            if ($line =~ /^(\S+)\s+\.\.\/\.\.\/devices\/(\S+)$/) {
-                $netdev_types{$1} = $2;
-            }
-        }
-        close($fh);
-   }
-   return \%netdev_types;
-}
-
-sub get_netdev_type {
-    my $netdev_name = shift;
-    my $netdev_types_ref = shift;
-    if (exists $$netdev_types_ref{$netdev_name}) {
-        if ($$netdev_types_ref{$netdev_name} =~ /^pci/) {
-            return "physical";
-        } elsif ($$netdev_types_ref{$netdev_name} =~ /^virtual/) {
-            return "virtual";
-        } else {
-            return "unknown";
-        }
-    }
-    return "unknown";
-}
-
+my $num_forks = 16;
 my $count = 1;
 my $cpu_topo_ref = build_cpu_topology("sys/devices/system/cpu");
-my @procstat_metrics;
 my %metric_types;
-#my $dir = pushd("proc");
 my $data_dir = "proc";
 my $dh;
 opendir($dh, $data_dir);
 for my $log_file (sort readdir($dh)) {
     if (($log_file =~ /^interrupts$/) || ($log_file =~ /^interrupts.xz$/)) {
-        #printf "found file %s\n", $log_file;
-        my $metric_type = "interrupts-sec";
-        my $curr_timestamp_ms; # Epochtime in milliseconds
-        my $prev_timestamp_ms; # Epochtime in milliseconds
-	    my $log_fh = new IO::Uncompress::UnXz $data_dir . "/" . $log_file, Transparent => 1 || die "[ERROR]could not open file " . $log_file;
-        my @cpu_ids;
-        my %curr_irq_counts; # {'irq-num'}{'cpu-id'}
-        my %prev_irq_counts; # {'irq-num'}{'cpu-id'}
-        my $num_cpus = 0;
-        while (<$log_fh>) {
-            chomp;
-            if (/^DATE:(\d+\.\d+)$/) {
-                #DATE:1614195515.641591437
-                if (defined($curr_timestamp_ms)) {
-                    $prev_timestamp_ms = $curr_timestamp_ms;
-                }
-                $curr_timestamp_ms = int ($1 * 1000);
-                $count++;
-            } elsif ( /^\s+(CPU\d+\s+)+/) {
-                @cpu_ids = split(/\s*CPU/, $_);
-                shift(@cpu_ids);
-                s/(\d+)\s*/$1/ for @cpu_ids;
-                $num_cpus = scalar @cpu_ids;
-            } elsif ( /^\s*([A-Z]{3}|[0-9]+):([^a-z,A-Z]+)(.*)/ ) {
-                my $irq = $1;
-                my $counts = $2;
-                my $extra = $3;
-                #printf "num_cpus: %d\n", $num_cpus;
-                #printf "line: %s\n", $_;
-                #printf "counts: %s\n", $2;
-                # 41:  0          0          0          0          0          0          0  IR-PCI-MSI 91275264-edge      PCIe PME, pciehp
-                my @counts = split(/\s+/, $counts);
-                shift(@counts);
-                #my $num_counts = scalar @counts;
-                #print "counts:\n";
-                #print Dumper \@counts;
-                (my $type, my $other, my $desc) = split(/\s+/, $extra);
-                #printf "type: %s  other: %s  desc: %s\n", $type, $other, $desc;
-                foreach my $cpu (@cpu_ids) {
-                    last if (scalar @counts == 0);
-                    $curr_irq_counts{$irq}{$cpu} = shift(@counts);
-                    if (exists($prev_irq_counts{$irq}{$cpu})) {
-                        my $irq_count_diff = $curr_irq_counts{$irq}{$cpu} - $prev_irq_counts{$irq}{$cpu};
-                        my $time_diff_sec = ($curr_timestamp_ms - $prev_timestamp_ms) / 1000;
-                        my $ints_sec = $irq_count_diff / $time_diff_sec;
-                        (my $package, my $die, my $core, my $thread) = get_cpu_topology($cpu, $cpu_topo_ref);
-                        my $this_name = $package . '-' . $die . '-' . $core . '-' . $thread . '-' . $cpu . '-' . $irq;
-                        my $this_type = "interrupts-sec";
-                        if (! exists $metric_types{$this_type}{$this_name}) {
-                            # Once defined use this to remember which index it uses in the @procstat_metrics array.
-                            # We need this index later to include the metric_data
-                            $metric_types{$this_type}{$this_name} = scalar @procstat_metrics;
-                            my %this_metric;
-                            my %desc = ('class' => 'throughput', 'source' => 'procstat',
-                                        'type' => $this_type);
-                            my %names = ('package' => $package, 'die' => $die, 'core' => $core, 'thread' => $thread, 'cpu' => $cpu, 'irq' => $irq, 'type' => $type, 'desc' => $desc);
-                            $this_metric{'desc'} = \%desc;
-                            $this_metric{'names'} = \%names;
-                            push(@procstat_metrics, \%this_metric);
+        my @pids;
+        for (my $i = 0; $i < $num_forks; $i++) {
+            if (my $pid = fork) {
+                push(@pids, $pid);
+            } else { # child
+                my $metric_type = "interrupts-sec";
+                my %metric_desc = ('class' => 'throughput', 'source' => 'procstat', 'type' => $metric_type);
+                my $curr_timestamp_ms; # Epochtime in milliseconds
+                my $prev_timestamp_ms; # Epochtime in milliseconds
+	            my $log_fh = new IO::Uncompress::UnXz $data_dir . "/" . $log_file, Transparent => 1 || die "[ERROR]could not open file " . $log_file;
+                my @cpu_ids;
+                my %curr_irq_counts; # {'irq-num'}{'cpu-id'}
+                my %prev_irq_counts; # {'irq-num'}{'cpu-id'}
+                my $num_cpus;
+                my $first_cpu_idx;
+                my $last_cpu_idx;
+
+                while (<$log_fh>) {
+                    chomp;
+                    if ( /^\s*([A-Z]{3}|[0-9]+):([^a-z,A-Z]+)(.*)/ ) {
+                        my $irq = $1;
+                        my $counts = $2;
+                        my $extra = $3;
+                        # example output
+                        # 41:  0          0          0          0          0          0          0  IR-PCI-MSI 91275264-edge      PCIe PME, pciehp
+                        my @counts = split(/\s+/, $counts);
+                        shift(@counts);
+                        (my $type, my $other, my $desc) = split(/\s+/, $extra);
+                        for (my $cpu_idx = $first_cpu_idx; $cpu_idx < $last_cpu_idx; $cpu_idx++) {
+                            my $cpu = $cpu_ids[$cpu_idx];
+                            $curr_irq_counts{$irq}{$cpu} = $counts[$cpu_idx];
+                            if (exists $prev_irq_counts{$irq}{$cpu} and defined $prev_irq_counts{$irq}{$cpu}) {
+                                my $irq_count_diff = $curr_irq_counts{$irq}{$cpu} - $prev_irq_counts{$irq}{$cpu};
+                                my $time_diff_sec = ($curr_timestamp_ms - $prev_timestamp_ms) / 1000;
+                                my $ints_sec = $irq_count_diff / $time_diff_sec;
+                                (my $package, my $die, my $core, my $thread) = get_cpu_topology($cpu, $cpu_topo_ref);
+                                my %metric_names = ('package' => $package, 'die' => $die, 'core' => $core, 'thread' => $thread, 'cpu' => $cpu, 'irq' => $irq, 'type' => $type, 'desc' => $desc);
+                                my %sample = ( 'value' => $ints_sec, 'end' => $curr_timestamp_ms );
+                                log_sample($i, \%metric_desc, \%metric_names, \%sample);
+                            }
+                            $prev_irq_counts{$irq}{$cpu} = $curr_irq_counts{$irq}{$cpu};
                         }
-                        my %sample = ( 'value' => $ints_sec, 'end' => $curr_timestamp_ms );
-                        push(@{ $procstat_metrics[$metric_types{$this_type}{$this_name}]{'data'}}, \%sample);
+                    } elsif ( /^\s+(CPU\d+\s+)+/) {
+                        @cpu_ids = split(/\s*CPU/, $_);
+                        shift(@cpu_ids);
+                        s/(\d+)\s*/$1/ for @cpu_ids;
+                        $num_cpus = scalar @cpu_ids;
+                        $first_cpu_idx = int $i * ($num_cpus / $num_forks);
+                        $last_cpu_idx = int (($i + 1) * ($num_cpus / $num_forks));
+                        if ($num_cpus < $last_cpu_idx) {
+                            $last_cpu_idx = $num_cpus;
+                        }
+                    } elsif (/^DATE:(\d+\.\d+)$/) {
+                        if (defined($curr_timestamp_ms)) {
+                            $prev_timestamp_ms = $curr_timestamp_ms;
+                        }
+                        $curr_timestamp_ms = int ($1 * 1000);
+                        $count++;
                     }
-                    $prev_irq_counts{$irq}{$cpu} = $curr_irq_counts{$irq}{$cpu};
                 }
-            }
+                finish_samples();
+                close($log_fh);
+                exit;
+            } # finish child
         } 
-        close($log_fh);
     }
 }
+while (wait() > -1) {}
 closedir $dh;
-if (scalar @procstat_metrics > 0) {
-    my $coder = JSON::XS->new;
-    my $json_fh = new IO::Compress::Xz "metric-data.json.xz" || die("Could not open file metric-data.json.xz for writing\n");
-    print $json_fh $coder->encode(\@procstat_metrics);
-    close($json_fh);
-}
