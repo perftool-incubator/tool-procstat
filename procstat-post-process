@@ -22,7 +22,7 @@ use toolbox::json;
 use toolbox::cpu;
 use toolbox::metrics;
 
-my $num_forks = 16;
+my $num_forks = 4;
 my $count = 1;
 my $cpu_topo_ref = build_cpu_topology("sys/devices/system/cpu");
 my %metric_types;
@@ -95,7 +95,7 @@ for my $log_file (sort readdir($dh)) {
                 close($log_fh);
                 exit;
             } # finish child
-        } 
+        }
     }
 }
 while (wait() > -1) {}
