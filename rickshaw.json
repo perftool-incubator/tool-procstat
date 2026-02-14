@@ -27,6 +27,10 @@
             {
                 "endpoint": "k8s",
                 "collector-types": [ "client", "server" ]
+            },
+            {
+                "endpoint": "kube",
+                "collector-types": [ "client", "server" ]
             }
         ],
         "whitelist": [
@@ -40,6 +44,10 @@
             },
             {
                 "endpoint": "k8s",
+                "collector-types": [ "master", "worker" ]
+            },
+            {
+                "endpoint": "kube",
                 "collector-types": [ "master", "worker" ]
             }
         ],
