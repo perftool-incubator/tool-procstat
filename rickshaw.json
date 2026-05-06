@@ -6,7 +6,7 @@
     },
     "tool": "procstat",
     "controller": {
-        "post-script": "%tool-dir%/procstat-post-process"
+        "post-script": "%tool-dir%/procstat-post-process.py"
     },
     "collector": {
         "files-from-controller": [
