@@ -90,6 +90,72 @@ def process_interrupts(fork_idx, num_forks, log_file, cpu_topo):
     metrics.finish_samples()
 
 
+def process_softnet_stat(log_file, cpu_topo, file_id):
+    metrics = CDMMetrics()
+    curr_timestamp_ms = None
+    prev_timestamp_ms = None
+    prev_counts = {}
+
+    metric_names = {
+        0: "processed-sec",
+        1: "dropped-sec",
+        2: "time-squeeze-sec",
+    }
+
+    try:
+        fh, _ = open_read_text_file(log_file)
+    except FileNotFoundError:
+        print(f"ERROR: could not open {log_file}")
+        return
+
+    for line in fh:
+        line = line.rstrip("\n")
+
+        m = re.match(r'^DATE:(\d+\.\d+)$', line)
+        if m:
+            if curr_timestamp_ms is not None:
+                prev_timestamp_ms = curr_timestamp_ms
+            curr_timestamp_ms = int(float(m.group(1)) * 1000)
+            continue
+
+        fields = line.split()
+        if len(fields) < 13:
+            continue
+        try:
+            cpu = int(fields[12], 16)
+        except (ValueError, IndexError):
+            continue
+
+        for col_idx, metric_type in metric_names.items():
+            try:
+                curr_count = int(fields[col_idx], 16)
+            except (ValueError, IndexError):
+                continue
+
+            key = (cpu, col_idx)
+            if prev_timestamp_ms is not None and key in prev_counts:
+                time_diff_sec = (curr_timestamp_ms - prev_timestamp_ms) / 1000
+                if time_diff_sec > 0:
+                    rate = (curr_count - prev_counts[key]) / time_diff_sec
+                    package, die, core, thread = get_cpu_topology(cpu, cpu_topo)
+                    desc = {
+                        "class": "throughput",
+                        "source": "procstat",
+                        "type": metric_type,
+                    }
+                    names = {
+                        "package": package, "die": die, "core": core,
+                        "thread": thread, "num": cpu,
+                    }
+                    sample = {"value": rate, "end": curr_timestamp_ms}
+                    metrics.log_sample(file_id, desc, names, sample)
+
+            prev_counts[key] = curr_count
+
+    fh.close()
+    metrics.finish_samples()
+
+
 def main():
     num_forks = 4
     data_dir = "proc"
@@ -114,6 +180,15 @@ def main():
             for t in threads:
                 t.join()
             break
+
+    softnet_dir = os.path.join(data_dir, "net")
+    if os.path.isdir(softnet_dir):
+        for entry in sorted(os.listdir(softnet_dir)):
+            if entry.startswith("softnet_stat"):
+                log_file = os.path.join(softnet_dir, entry)
+                print(f"Processing softnet_stat from {log_file}")
+                process_softnet_stat(log_file, cpu_topo, "softnet")
+                break
 
     print("procstat post-processing complete")
 
