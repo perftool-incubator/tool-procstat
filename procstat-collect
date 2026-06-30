@@ -5,7 +5,7 @@ interval=$1; shift
 
 re='^[1-9][0-9]*$'
 if [[ ! "$interval" =~ $re ]]; then
-    echo "Interval must a be a positive interger, exiting"
+    echo "Interval must be a positive integer, exiting"
     exit 1
 fi
 
@@ -41,6 +41,6 @@ while [ 1 == 1 ]; do
         this_date="DATE:`date +%s.%N`"
         echo -e "\n$this_date" >>$local_file
         cat /proc/$file >>$local_file
-        sleep $interval
     done
+    sleep $interval
 done

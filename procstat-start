@@ -36,7 +36,7 @@ while true; do
             break
             ;;
         *)
-            echo "Invalid optioni: $1"
+            echo "Invalid option: $1"
             exit 1
     esac
 done
@@ -54,7 +54,7 @@ find /proc/irq -mindepth 1 -type f | while read line; do
     cat $line >proc-irq/$line
 done
 
-/bin/rm -f procstat-pids.txt
+/bin/rm -f procstat-pid.txt
 if [ -e $procstat_collect ]; then
     $procstat_collect $files $interval &
     procstat_pid=$!
@@ -66,4 +66,5 @@ if [ -e $procstat_collect ]; then
     echo $procstat_pid >procstat-pid.txt
 else
     echo "$procstat_collect is not present, exiting"
+    exit 1
 fi
