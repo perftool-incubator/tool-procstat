@@ -16,7 +16,7 @@ if [ -e procstat-pid.txt ]; then
         xz -3 -T 0 $line
     done
 else
-    echo "procstst-pid.txt not found"
+    echo "procstat-pid.txt not found"
     echo "PWD: `/bin/pwd`"
     echo "LS:"
     /bin/ls -l
