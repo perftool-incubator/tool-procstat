@@ -27,6 +27,8 @@ def process_interrupts(fork_idx, num_forks, log_file, cpu_topo):
     prev_irq_counts = {}
     first_cpu_idx = 0
     last_cpu_idx = 0
+    cpu_topo_cache = {}
+    metric_idx_cache = {}  # (irq, cpu) -> idx, avoids repeated label lookup
 
     try:
         fh, _ = open_read_text_file(log_file)
@@ -75,14 +77,27 @@ def process_interrupts(fork_idx, num_forks, log_file, cpu_topo):
                     time_diff_sec = (curr_timestamp_ms - prev_timestamp_ms) / 1000
                     if time_diff_sec > 0:
                         ints_sec = irq_diff / time_diff_sec
-                        package, die, core, thread = get_cpu_topology(cpu, cpu_topo)
-                        names = {
-                            "package": package, "die": die, "core": core,
-                            "thread": thread, "cpu": cpu, "irq": irq,
-                            "type": irq_type, "desc": irq_desc,
-                        }
-                        sample = {"value": ints_sec, "end": curr_timestamp_ms}
-                        metrics.log_sample(str(fork_idx), desc, names, sample)
+                        cache_key = (irq, cpu)
+                        if cache_key in metric_idx_cache:
+                            metrics.log_sample_by_idx(
+                                metric_idx_cache[cache_key], ints_sec, curr_timestamp_ms
+                            )
+                        elif ints_sec != 0:
+                            # Skip zero-value cold-path registrations: a metric
+                            # that is zero on its first occurrence will always be
+                            # purged by finish_samples anyway. Registering it just
+                            # to purge it wastes memory and finish_samples time.
+                            if cpu not in cpu_topo_cache:
+                                cpu_topo_cache[cpu] = get_cpu_topology(cpu, cpu_topo)
+                            package, die, core, thread = cpu_topo_cache[cpu]
+                            names = {
+                                "package": package, "die": die, "core": core,
+                                "thread": thread, "cpu": cpu, "irq": irq,
+                                "type": irq_type, "desc": irq_desc,
+                            }
+                            sample = {"value": ints_sec, "end": curr_timestamp_ms}
+                            idx = metrics.log_sample(str(fork_idx), desc, names, sample)
+                            metric_idx_cache[cache_key] = idx
 
                 prev_irq_counts.setdefault(irq, {})[cpu] = curr_count
 
