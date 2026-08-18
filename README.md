@@ -15,11 +15,12 @@ Procstat periodically snapshots `/proc` files during test execution. The default
 | softirqs | Software interrupt counts |
 | meminfo | System memory usage |
 | schedstat | Scheduler statistics |
+| net/softnet_stat | Per-CPU packet processing, dropped, and time-squeeze counts (post-processed into rates) |
 
 ## Configuration
 
 The start script accepts two parameters:
-- `--files <list>` — Comma-separated list of /proc files to collect (default: `interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat`)
+- `--files <list>` — Comma-separated list of /proc files to collect (default: `interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat,net/softnet_stat`)
 - `--interval <seconds>` — Collection interval in seconds (default: `3`)
 
 ## Integration

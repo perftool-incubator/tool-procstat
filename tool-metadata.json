@@ -10,7 +10,7 @@
   "cdm_sources": [
     {
       "source": "procstat",
-      "types": ["interrupts-sec", "processed-sec"]
+      "types": ["interrupts-sec", "processed-sec", "dropped-sec", "time-squeeze-sec"]
     }
   ],
   "output_files": [

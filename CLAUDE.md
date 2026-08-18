@@ -20,7 +20,7 @@ Collects periodic snapshots of `/proc` filesystem files during benchmark executi
 | `multiplex.json` | Parameter validation rules and `defaults` preset for multiplex (mirrors benchmark `multiplex.json`) |
 
 ## Configuration
-- `--files <list>` — Comma-separated /proc files to collect (default: `interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat`)
+- `--files <list>` — Comma-separated /proc files to collect (default: `interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat,net/softnet_stat`)
 - `--interval <seconds>` — Collection interval (default: `3`)
 
 ## Conventions
