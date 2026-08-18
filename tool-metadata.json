@@ -1,0 +1,25 @@
+{
+  "rickshaw-tool-metadata": {
+    "schema": {
+      "version": "2026.08.11"
+    }
+  },
+  "tool": "procstat",
+  "description": "Periodic snapshots of a configurable set of /proc files. Interrupt counts and net/softnet_stat are parsed into per-CPU CDM metrics; the remaining files (vmstat, slabinfo, softirqs, meminfo, schedstat by default) are kept only as raw periodic snapshots.",
+  "cdm_indexed": true,
+  "cdm_sources": [
+    {
+      "source": "procstat",
+      "types": ["interrupts-sec", "processed-sec"]
+    }
+  ],
+  "output_files": [
+    "proc/vmstat",
+    "proc/slabinfo",
+    "proc/softirqs",
+    "proc/meminfo",
+    "proc/schedstat",
+    "proc/interrupts",
+    "proc/net/softnet_stat"
+  ]
+}

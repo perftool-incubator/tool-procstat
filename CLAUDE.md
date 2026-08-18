@@ -16,6 +16,8 @@ Collects periodic snapshots of `/proc` filesystem files during benchmark executi
 | `procstat-post-process.py` | Derives interrupt-rate metrics from snapshots using CDMMetrics |
 | `rickshaw.json` | Rickshaw integration: endpoint allow/block lists, file deployment, post-process script |
 | `workshop.json` | Engine image build requirements (minimal) |
+| `tool-metadata.json` | Machine-readable description and CDM-indexed status (consumed by `crucible tools list`) |
+| `multiplex.json` | Parameter validation rules and `defaults` preset for multiplex (mirrors benchmark `multiplex.json`) |
 
 ## Configuration
 - `--files <list>` — Comma-separated /proc files to collect (default: `interrupts,vmstat,slabinfo,softirqs,meminfo,schedstat`)
